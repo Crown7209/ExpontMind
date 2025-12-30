@@ -1,0 +1,251 @@
+@import "tailwindcss";
+
+/**
+ * Cinematic Portfolio - Global Styles
+ *
+ * PHILOSOPHY:
+ * - Minimal base styles, let Three.js scene be the star
+ * - Smooth scroll for that premium feel
+ * - Dark theme as foundation for 3D content
+ */
+
+:root {
+  /* Color palette - dark cinematic */
+  --background: #0f0a0a;
+  --foreground: #fafafa;
+  --muted: rgba(255, 255, 255, 0.6);
+
+  /* Timing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Cloud scene gradients */
+  --color-sky-dark: #1e4877;
+  --color-sky-mid: #4584b4;
+  --color-sky-light: #87ceeb;
+}
+
+/* Cloud scene custom classes */
+.bg-sky-gradient {
+  background: linear-gradient(
+    180deg,
+    #1e4877 0%,
+    #4584b4 40%,
+    #87ceeb 70%,
+    #ffffff 100%
+  );
+}
+
+.bg-content-fade {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 10%,
+    rgba(255, 255, 255, 0.8) 20%,
+    #ffffff 40%,
+    #ffffff 100%
+  );
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/**
+ * Smooth scroll behavior
+ *
+ * WHY scroll-behavior: smooth is NOT used:
+ * - It conflicts with GSAP ScrollTrigger's scrub
+ * - GSAP handles all scroll-based animation smoothing
+ * - Native smooth scroll adds unpredictable timing
+ *
+ * We use smooth scrolling only for anchor navigation (if any),
+ * not for the main scroll experience.
+ */
+html,
+body {
+  background: #0f0a0a;
+  background-color: #0f0a0a;
+}
+
+html {
+  scroll-behavior: auto;
+  overflow-x: hidden;
+}
+
+body {
+  background: #0f0a0a;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Prevent overscroll bounce on macOS - breaks scroll calculations */
+  overscroll-behavior: none;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/**
+ * Selection styling - matches theme
+ */
+::selection {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--foreground);
+}
+
+/**
+ * Focus styles for accessibility
+ */
+:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
+}
+
+/**
+ * Canvas container - prevents any overflow issues
+ */
+canvas {
+  display: block;
+  touch-action: none; /* Prevents touch scroll interference */
+}
+
+/**
+ * Text rendering optimization
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.02em;
+}
+
+/**
+ * Utility for cinematic text fade
+ * Use with Tailwind: className="cinematic-fade"
+ */
+.cinematic-fade {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.8s var(--ease-out-expo),
+    transform 0.8s var(--ease-out-expo);
+}
+
+.cinematic-fade.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes fog-drift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 600px 300px;
+  }
+}
+
+@keyframes fog-drift-slow {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -400px 200px;
+  }
+}
+
+@keyframes fog-drift-reverse {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -300px -150px;
+  }
+}
+
+.animate-fog-drift {
+  animation: fog-drift 60s linear infinite;
+}
+
+.animate-fog-drift-slow {
+  animation: fog-drift-slow 90s linear infinite;
+}
+
+.animate-fog-drift-reverse {
+  animation: fog-drift-reverse 75s linear infinite;
+}
+
+/* Scroll indicator animation */
+@keyframes scrollBounce {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0.3;
+  }
+}
+
+.scroll-indicator-dot {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 2px;
+  animation: scrollBounce 1.5s ease-in-out infinite;
+}
+
+/* Cloud container gradient */
+.cloud-gradient {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 20%,
+    rgba(30, 72, 119, 0.4) 30%,
+    rgba(30, 72, 119, 0.7) 40%,
+    #1e4877 50%,
+    #4584b4 65%,
+    #87ceeb 80%,
+    #ffffff 100%
+  );
+}
+
+/* Cloud bottom fade overlay */
+.cloud-fade-overlay::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40vh;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 40%,
+    rgba(255, 255, 255, 0.7) 70%,
+    #ffffff 100%
+  );
+  pointer-events: none;
+  z-index: 10;
+}
