@@ -3,10 +3,48 @@ import { useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import { Mountain } from "./Mountain";
+import { Logo } from "./Logo";
 
 interface SceneProps {
   startVP?: number; // Start viewport multiplier (default: 2)
   endVP?: number; // End viewport multiplier (default: 4)
+}
+
+// Logo that moves with scroll like camera
+function AnimatedLogo({ startVP = 4, endVP = 8.5 }: SceneProps) {
+  const logoRef = useRef<THREE.Group>(null);
+
+  const initialY = 40;
+  const initialZ = -32;
+
+  useFrame(() => {
+    if (!logoRef.current) return;
+
+    const scrollY = window.scrollY;
+    const viewportHeight = window.innerHeight;
+
+    const startScroll = viewportHeight * startVP;
+    const endScroll = viewportHeight * endVP;
+
+    const progress = Math.min(
+      Math.max((scrollY - startScroll) / (endScroll - startScroll), 0),
+      1
+    );
+
+    // Logo moves similar to camera but stays in front of it
+    const targetY = initialY + progress * -100;
+    const targetZ = initialZ + progress * 80;
+
+    // Smooth lerp
+    logoRef.current.position.y += (targetY - logoRef.current.position.y) * 0.1;
+    logoRef.current.position.z += (targetZ - logoRef.current.position.z) * 0.1;
+  });
+
+  return (
+    <group ref={logoRef} position={[0, initialY, initialZ]}>
+      <Logo scale={8} rotation={[-Math.PI / 4, 0, 0]} />
+    </group>
+  );
 }
 
 function ScrollCamera({ startVP = 4, endVP = 8.5 }: SceneProps) {
@@ -119,6 +157,8 @@ export const Scene = (props: SceneProps) => {
       camera={{ position: [0, -180, 100], fov: 45 }}
     >
       <ScrollCamera {...props} />
+
+      <AnimatedLogo {...props} />
 
       <Mountain />
 

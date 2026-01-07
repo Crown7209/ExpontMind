@@ -59,17 +59,6 @@
   box-sizing: border-box;
 }
 
-/**
- * Smooth scroll behavior
- *
- * WHY scroll-behavior: smooth is NOT used:
- * - It conflicts with GSAP ScrollTrigger's scrub
- * - GSAP handles all scroll-based animation smoothing
- * - Native smooth scroll adds unpredictable timing
- *
- * We use smooth scrolling only for anchor navigation (if any),
- * not for the main scroll experience.
- */
 html,
 body {
   background: #0f0a0a;
@@ -273,3 +262,4 @@ h6 {
   pointer-events: none;
   z-index: 10;
 }
+

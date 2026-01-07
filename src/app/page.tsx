@@ -10,6 +10,11 @@ import { Scene } from "@/components/Scene";
 import VideoProjection from "@/components/VideoProjection";
 import { Logo } from "@/components/Logo";
 import { Environment } from "@react-three/drei";
+import Ascii from "@/components/Ascii";
+import NoiseOverlay from "@/components/NoiseOverlay";
+import GeometricGrid from "@/components/GeometricGrid";
+import TextRepetition from "@/components/TextRepetition";
+import { Header } from "@/components/navigation/Header";
 
 const Partners = dynamic(
   () => import("@/components/Partners").then((mod) => mod.Partners),
@@ -17,9 +22,7 @@ const Partners = dynamic(
     ssr: false,
   }
 );
-const Footer = dynamic(() => import("@/components/navigation/Footer"), {
-  ssr: false,
-});
+
 const TrainScene = dynamic(() => import("@/components/TrainScene"), {
   ssr: false,
 });
@@ -178,6 +181,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen font-sans bg-[#0f0a0a]">
+      {/* Noise Overlay */}
+      <NoiseOverlay opacity={0.05} zIndex={1000} />
+
+      {/* Geometric Grid Background */}
+      {/* <GeometricGrid zIndex={2} showDebugText={false} gridOpacity={0.15} /> */}
+
       <div
         className="fixed inset-0 w-full h-full pointer-events-none"
         style={{ zIndex: 0 }}
@@ -188,26 +197,13 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="fixed inset-x-0 top-0 z-20">
-        <div className="relative w-full px-[4vw] pt-4 pb-5 flex justify-center items-center">
-          <div className="relative w-full flex justify-between items-center">
-            <a href="#" className="text-white font-mono text-xl no-underline">
-              MOUSSA
-            </a>
-            <a href="#" className="text-white font-mono text-xl no-underline">
-              CONTACT
-            </a>
-          </div>
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] h-px bg-white/20" />
-        </div>
-      </nav>
+      <Header />
 
       {/* Hero Section */}
       <section className="relative">
         <div className="ghost_hero-item h-[320vh]" />
         <div className="fixed inset-0 w-full h-full flex justify-between items-end pointer-events-none z-0">
-          <div className="relative flex-1 flex justify-start items-center px-[4vw] pb-[4vw] text-white uppercase font-medium text-[13.7vw] text-center leading-[0.8]">
+          <div className="relative flex-1 flex justify-start items-center px-[4vw] py-[50px] text-white uppercase font-medium text-[13.7vw] text-center leading-[0.8]">
             <p>Expont Mind</p>
           </div>
         </div>
@@ -257,7 +253,7 @@ export default function Home() {
 
             <div className="relative w-full flex flex-col justify-around items-stretch p-[2vw_4vw]">
               <div className="relative w-full flex justify-between items-end pt-[4vw]">
-                <div className="flex flex-col uppercase text-[8vw] font-medium leading-none">
+                {/* <div className="flex flex-col uppercase text-[8vw] font-medium leading-none">
                   <div className="overflow-hidden">
                     <div className="line">NATURE</div>
                   </div>
@@ -267,7 +263,7 @@ export default function Home() {
                       YOU
                     </div>
                   </div>
-                </div>
+                </div> */}
               </div>
             </div>
           </div>
@@ -293,7 +289,10 @@ export default function Home() {
         </div>
       </div>
 
-      <Footer />
+      {/* Ascii Section */}
+      <section className="relative h-screen">
+        <Ascii />
+      </section>
     </div>
   );
 }

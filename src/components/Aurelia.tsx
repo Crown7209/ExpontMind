@@ -21,7 +21,6 @@ export function Aurelia({ className = "", onLoad, onError }: AureliaProps) {
       const x = (e.clientX / window.innerWidth - 0.5) * 2; // -1 to 1
       const y = (e.clientY / window.innerHeight - 0.5) * 2; // -1 to 1
 
-      // Cursor дээшлэхэд Aurelia дээшилнэ (negative y = up)
       setMouseOffset({
         x: x * 30, // Хажуу тийш 30px хүртэл
         y: y * 40, // Дээш доош 40px хүртэл

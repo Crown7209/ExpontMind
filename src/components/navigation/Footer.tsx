@@ -1,890 +1,132 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-
-const TARGET_LONG_SIDE = 128 * 74;
-const MIN_GRID_SIZE = 8;
-const CELL_CROP_X = 1;
-const CELL_CROP_Y = 2;
-
-const FLUID_CELL = 0;
-const AIR_CELL = 1;
-const SOLID_CELL = 2;
-const GRAVITY = -9.81;
-const SPEED_1 = 1.0 / 60.0 / 16;
-const SPEED_BASE = 1.0 / 60.0 / 3;
-const SPEED_2 = 1.0 / 60.0 / 1.25;
-
-const BASE: [string, number][] = [
-  ["~", 12198],
-  [":", 6921],
-  ["-", 5589],
-  ["·", 3267],
-  [" ", 0],
-  [" ", 0],
-];
-
-const RENDER_CHARS: [string, number][][] = [
-  [["F", 26574], ["F", 26574], ["f", 17490], ...BASE],
-  [["L", 21327], ["L", 21327], ["l", 14019], ...BASE],
-  [["U", 32973], ["U", 32973], ["u", 24093], ...BASE],
-  [["I", 14883], ["I", 14883], ["i", 13638], ...BASE],
-  [["D", 36198], ["D", 36198], ["d", 30762], ...BASE],
-];
-
-function clamp(x: number, min: number, max: number): number {
-  if (x < min) return min;
-  else if (x > max) return max;
-  else return x;
-}
-
-class FlipFluid {
-  density: number;
-  fNumX: number;
-  fNumY: number;
-  h: number;
-  fInvSpacing: number;
-  fNumCells: number;
-  u: Float32Array;
-  v: Float32Array;
-  du: Float32Array;
-  dv: Float32Array;
-  prevU: Float32Array;
-  prevV: Float32Array;
-  p: Float32Array;
-  s: Float32Array;
-  cellType: Int32Array;
-  cellColor: Float32Array;
-  maxParticles: number;
-  particlePos: Float32Array;
-  particleColor: Float32Array;
-  particleVel: Float32Array;
-  particleDensity: Float32Array;
-  particleRestDensity: number;
-  particleRadius: number;
-  pInvSpacing: number;
-  pNumX: number;
-  pNumY: number;
-  pNumCells: number;
-  numCellParticles: Int32Array;
-  firstCellParticle: Int32Array;
-  cellParticleIds: Int32Array;
-  numParticles: number;
-
-  constructor(
-    density: number,
-    width: number,
-    height: number,
-    spacing: number,
-    particleRadius: number,
-    maxParticles: number
-  ) {
-    this.density = density;
-    this.fNumX = Math.floor(width / spacing);
-    this.fNumY = Math.floor(height / spacing);
-    this.h = Math.max(width / this.fNumX, height / this.fNumY);
-    this.fInvSpacing = 1.0 / this.h;
-    this.fNumCells = this.fNumX * this.fNumY;
-
-    this.u = new Float32Array(this.fNumCells);
-    this.v = new Float32Array(this.fNumCells);
-    this.du = new Float32Array(this.fNumCells);
-    this.dv = new Float32Array(this.fNumCells);
-    this.prevU = new Float32Array(this.fNumCells);
-    this.prevV = new Float32Array(this.fNumCells);
-    this.p = new Float32Array(this.fNumCells);
-    this.s = new Float32Array(this.fNumCells);
-    this.cellType = new Int32Array(this.fNumCells);
-    this.cellColor = new Float32Array(3 * this.fNumCells);
-
-    this.maxParticles = maxParticles;
-    this.particlePos = new Float32Array(2 * this.maxParticles);
-    this.particleColor = new Float32Array(3 * this.maxParticles);
-    for (let i = 0; i < this.maxParticles; i++) {
-      this.particleColor[3 * i + 2] = 1.0;
-    }
-
-    this.particleVel = new Float32Array(2 * this.maxParticles);
-    this.particleDensity = new Float32Array(this.fNumCells);
-    this.particleRestDensity = 0.0;
-
-    this.particleRadius = particleRadius;
-    this.pInvSpacing = 1.0 / (2.2 * particleRadius);
-    this.pNumX = Math.floor(width * this.pInvSpacing) + 1;
-    this.pNumY = Math.floor(height * this.pInvSpacing) + 1;
-    this.pNumCells = this.pNumX * this.pNumY;
-
-    this.numCellParticles = new Int32Array(this.pNumCells);
-    this.firstCellParticle = new Int32Array(this.pNumCells + 1);
-    this.cellParticleIds = new Int32Array(maxParticles);
-    this.numParticles = 0;
-  }
-
-  integrateParticles(dt: number, gravityX: number, gravityY: number): void {
-    for (let i = 0; i < this.numParticles; i++) {
-      this.particleVel[2 * i] += dt * gravityX;
-      this.particleVel[2 * i + 1] += dt * gravityY;
-      this.particlePos[2 * i] += this.particleVel[2 * i] * dt;
-      this.particlePos[2 * i + 1] += this.particleVel[2 * i + 1] * dt;
-    }
-  }
-
-  pushParticlesApart(numIters: number): void {
-    this.numCellParticles.fill(0);
-
-    for (let i = 0; i < this.numParticles; i++) {
-      const x = this.particlePos[2 * i];
-      const y = this.particlePos[2 * i + 1];
-      const xi = clamp(Math.floor(x * this.pInvSpacing), 0, this.pNumX - 1);
-      const yi = clamp(Math.floor(y * this.pInvSpacing), 0, this.pNumY - 1);
-      const cellNr = xi * this.pNumY + yi;
-      this.numCellParticles[cellNr]++;
-    }
-
-    let first = 0;
-    for (let i = 0; i < this.pNumCells; i++) {
-      first += this.numCellParticles[i];
-      this.firstCellParticle[i] = first;
-    }
-    this.firstCellParticle[this.pNumCells] = first;
-
-    for (let i = 0; i < this.numParticles; i++) {
-      const x = this.particlePos[2 * i];
-      const y = this.particlePos[2 * i + 1];
-      const xi = clamp(Math.floor(x * this.pInvSpacing), 0, this.pNumX - 1);
-      const yi = clamp(Math.floor(y * this.pInvSpacing), 0, this.pNumY - 1);
-      const cellNr = xi * this.pNumY + yi;
-      this.firstCellParticle[cellNr]--;
-      this.cellParticleIds[this.firstCellParticle[cellNr]] = i;
-    }
-
-    const minDist = 2.0 * this.particleRadius;
-    const minDist2 = minDist * minDist;
-
-    for (let iter = 0; iter < numIters; iter++) {
-      for (let i = 0; i < this.numParticles; i++) {
-        const px = this.particlePos[2 * i];
-        const py = this.particlePos[2 * i + 1];
-        const pxi = Math.floor(px * this.pInvSpacing);
-        const pyi = Math.floor(py * this.pInvSpacing);
-        const x0 = Math.max(pxi - 1, 0);
-        const y0 = Math.max(pyi - 1, 0);
-        const x1 = Math.min(pxi + 1, this.pNumX - 1);
-        const y1 = Math.min(pyi + 1, this.pNumY - 1);
-
-        for (let xi = x0; xi <= x1; xi++) {
-          for (let yi = y0; yi <= y1; yi++) {
-            const cellNr = xi * this.pNumY + yi;
-            const firstIdx = this.firstCellParticle[cellNr];
-            const last = this.firstCellParticle[cellNr + 1];
-            for (let j = firstIdx; j < last; j++) {
-              const id = this.cellParticleIds[j];
-              if (id === i) continue;
-              const qx = this.particlePos[2 * id];
-              const qy = this.particlePos[2 * id + 1];
-              let dx = qx - px;
-              let dy = qy - py;
-              const d2 = dx * dx + dy * dy;
-              if (d2 > minDist2 || d2 === 0.0) continue;
-              const d = Math.sqrt(d2);
-              const s = (0.5 * (minDist - d)) / d;
-              dx *= s;
-              dy *= s;
-              this.particlePos[2 * i] -= dx;
-              this.particlePos[2 * i + 1] -= dy;
-              this.particlePos[2 * id] += dx;
-              this.particlePos[2 * id + 1] += dy;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  handleParticleCollisions(
-    obstacleX: number,
-    obstacleY: number,
-    obstacleRadius: number
-  ): void {
-    const h = 1.0 / this.fInvSpacing;
-    const r = this.particleRadius;
-    const minX = h + r;
-    const maxX = (this.fNumX - 1) * h - r;
-    const minY = h + r;
-    const maxY = (this.fNumY - 1) * h - r;
-
-    for (let i = 0; i < this.numParticles; i++) {
-      let x = this.particlePos[2 * i];
-      let y = this.particlePos[2 * i + 1];
-
-      // Circle collision (logo shape)
-      const dx = x - obstacleX;
-      const dy = y - obstacleY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < obstacleRadius) {
-        // Push particle to circle edge
-        const scale = obstacleRadius / dist;
-        x = obstacleX + dx * scale;
-        y = obstacleY + dy * scale;
-        this.particleVel[2 * i] = 0;
-        this.particleVel[2 * i + 1] = 0;
-      }
-
-      // Wall collisions
-      if (x < minX) {
-        x = minX;
-        this.particleVel[2 * i] = 0.0;
-      }
-      if (x > maxX) {
-        x = maxX;
-        this.particleVel[2 * i] = 0.0;
-      }
-      if (y < minY) {
-        y = minY;
-        this.particleVel[2 * i + 1] = 0.0;
-      }
-      if (y > maxY) {
-        y = maxY;
-        this.particleVel[2 * i + 1] = 0.0;
-      }
-      this.particlePos[2 * i] = x;
-      this.particlePos[2 * i + 1] = y;
-    }
-  }
-
-  updateParticleDensity(): void {
-    const n = this.fNumY;
-    const h = this.h;
-    const h1 = this.fInvSpacing;
-    const h2 = 0.5 * h;
-    const d = this.particleDensity;
-    d.fill(0.0);
-
-    for (let i = 0; i < this.numParticles; i++) {
-      let x = clamp(this.particlePos[2 * i], h, (this.fNumX - 1) * h);
-      let y = clamp(this.particlePos[2 * i + 1], h, (this.fNumY - 1) * h);
-
-      const x0 = Math.floor((x - h2) * h1);
-      const tx = (x - h2 - x0 * h) * h1;
-      const x1 = Math.min(x0 + 1, this.fNumX - 2);
-      const y0 = Math.floor((y - h2) * h1);
-      const ty = (y - h2 - y0 * h) * h1;
-      const y1 = Math.min(y0 + 1, this.fNumY - 2);
-      const sx = 1.0 - tx;
-      const sy = 1.0 - ty;
-
-      if (x0 < this.fNumX && y0 < this.fNumY) d[x0 * n + y0] += sx * sy;
-      if (x1 < this.fNumX && y0 < this.fNumY) d[x1 * n + y0] += tx * sy;
-      if (x1 < this.fNumX && y1 < this.fNumY) d[x1 * n + y1] += tx * ty;
-      if (x0 < this.fNumX && y1 < this.fNumY) d[x0 * n + y1] += sx * ty;
-    }
-
-    if (this.particleRestDensity === 0.0) {
-      let sum = 0.0;
-      let numFluidCells = 0;
-      for (let i = 0; i < this.fNumCells; i++) {
-        if (this.cellType[i] === FLUID_CELL) {
-          sum += d[i];
-          numFluidCells++;
-        }
-      }
-      if (numFluidCells > 0) this.particleRestDensity = sum / numFluidCells;
-    }
-  }
-
-  transferVelocities(toGrid: boolean, flipRatio: number = 0): void {
-    const n = this.fNumY;
-    const h = this.h;
-    const h1 = this.fInvSpacing;
-    const h2 = 0.5 * h;
-
-    if (toGrid) {
-      this.prevU.set(this.u);
-      this.prevV.set(this.v);
-      this.du.fill(0.0);
-      this.dv.fill(0.0);
-      this.u.fill(0.0);
-      this.v.fill(0.0);
-
-      for (let i = 0; i < this.fNumCells; i++) {
-        this.cellType[i] = this.s[i] === 0.0 ? SOLID_CELL : AIR_CELL;
-      }
-
-      for (let i = 0; i < this.numParticles; i++) {
-        const x = this.particlePos[2 * i];
-        const y = this.particlePos[2 * i + 1];
-        const xi = clamp(Math.floor(x * h1), 0, this.fNumX - 1);
-        const yi = clamp(Math.floor(y * h1), 0, this.fNumY - 1);
-        const cellNr = xi * n + yi;
-        if (this.cellType[cellNr] === AIR_CELL)
-          this.cellType[cellNr] = FLUID_CELL;
-      }
-    }
-
-    for (let component = 0; component < 2; component++) {
-      const dx = component === 0 ? 0.0 : h2;
-      const dy = component === 0 ? h2 : 0.0;
-      const f = component === 0 ? this.u : this.v;
-      const prevF = component === 0 ? this.prevU : this.prevV;
-      const d = component === 0 ? this.du : this.dv;
-
-      for (let i = 0; i < this.numParticles; i++) {
-        let x = clamp(this.particlePos[2 * i], h, (this.fNumX - 1) * h);
-        let y = clamp(this.particlePos[2 * i + 1], h, (this.fNumY - 1) * h);
-
-        const x0 = Math.min(Math.floor((x - dx) * h1), this.fNumX - 2);
-        const tx = (x - dx - x0 * h) * h1;
-        const x1 = Math.min(x0 + 1, this.fNumX - 2);
-        const y0 = Math.min(Math.floor((y - dy) * h1), this.fNumY - 2);
-        const ty = (y - dy - y0 * h) * h1;
-        const y1 = Math.min(y0 + 1, this.fNumY - 2);
-
-        const sx = 1.0 - tx;
-        const sy = 1.0 - ty;
-        const d0 = sx * sy;
-        const d1 = tx * sy;
-        const d2 = tx * ty;
-        const d3 = sx * ty;
-
-        const nr0 = x0 * n + y0;
-        const nr1 = x1 * n + y0;
-        const nr2 = x1 * n + y1;
-        const nr3 = x0 * n + y1;
-
-        if (toGrid) {
-          const pv = this.particleVel[2 * i + component];
-          f[nr0] += pv * d0;
-          d[nr0] += d0;
-          f[nr1] += pv * d1;
-          d[nr1] += d1;
-          f[nr2] += pv * d2;
-          d[nr2] += d2;
-          f[nr3] += pv * d3;
-          d[nr3] += d3;
-        } else {
-          const offset = component === 0 ? n : 1;
-          const valid0 =
-            this.cellType[nr0] !== AIR_CELL ||
-            this.cellType[nr0 - offset] !== AIR_CELL
-              ? 1.0
-              : 0.0;
-          const valid1 =
-            this.cellType[nr1] !== AIR_CELL ||
-            this.cellType[nr1 - offset] !== AIR_CELL
-              ? 1.0
-              : 0.0;
-          const valid2 =
-            this.cellType[nr2] !== AIR_CELL ||
-            this.cellType[nr2 - offset] !== AIR_CELL
-              ? 1.0
-              : 0.0;
-          const valid3 =
-            this.cellType[nr3] !== AIR_CELL ||
-            this.cellType[nr3 - offset] !== AIR_CELL
-              ? 1.0
-              : 0.0;
-
-          const v = this.particleVel[2 * i + component];
-          const dSum = valid0 * d0 + valid1 * d1 + valid2 * d2 + valid3 * d3;
-
-          if (dSum > 0.0) {
-            const picV =
-              (valid0 * d0 * f[nr0] +
-                valid1 * d1 * f[nr1] +
-                valid2 * d2 * f[nr2] +
-                valid3 * d3 * f[nr3]) /
-              dSum;
-            const corr =
-              (valid0 * d0 * (f[nr0] - prevF[nr0]) +
-                valid1 * d1 * (f[nr1] - prevF[nr1]) +
-                valid2 * d2 * (f[nr2] - prevF[nr2]) +
-                valid3 * d3 * (f[nr3] - prevF[nr3])) /
-              dSum;
-            const flipV = v + corr;
-            this.particleVel[2 * i + component] =
-              (1.0 - flipRatio) * picV + flipRatio * flipV;
-          }
-        }
-      }
-
-      if (toGrid) {
-        for (let i = 0; i < f.length; i++) {
-          if (d[i] > 0.0) f[i] /= d[i];
-        }
-
-        for (let i = 0; i < this.fNumX; i++) {
-          for (let j = 0; j < this.fNumY; j++) {
-            const solid = this.cellType[i * n + j] === SOLID_CELL;
-            if (
-              solid ||
-              (i > 0 && this.cellType[(i - 1) * n + j] === SOLID_CELL)
-            ) {
-              this.u[i * n + j] = this.prevU[i * n + j];
-            }
-            if (
-              solid ||
-              (j > 0 && this.cellType[i * n + j - 1] === SOLID_CELL)
-            ) {
-              this.v[i * n + j] = this.prevV[i * n + j];
-            }
-          }
-        }
-      }
-    }
-  }
-
-  solveIncompressibility(
-    numIters: number,
-    dt: number,
-    overRelaxation: number,
-    compensateDrift: boolean = true
-  ): void {
-    this.p.fill(0.0);
-    this.prevU.set(this.u);
-    this.prevV.set(this.v);
-
-    const n = this.fNumY;
-    const cp = (this.density * this.h) / dt;
-
-    for (let iter = 0; iter < numIters; iter++) {
-      for (let i = 1; i < this.fNumX - 1; i++) {
-        for (let j = 1; j < this.fNumY - 1; j++) {
-          if (this.cellType[i * n + j] !== FLUID_CELL) continue;
-
-          const center = i * n + j;
-          const left = (i - 1) * n + j;
-          const right = (i + 1) * n + j;
-          const bottom = i * n + j - 1;
-          const top = i * n + j + 1;
-
-          const sx0 = this.s[left];
-          const sx1 = this.s[right];
-          const sy0 = this.s[bottom];
-          const sy1 = this.s[top];
-          const s = sx0 + sx1 + sy0 + sy1;
-          if (s === 0.0) continue;
-
-          let div =
-            this.u[right] - this.u[center] + this.v[top] - this.v[center];
-
-          if (this.particleRestDensity > 0.0 && compensateDrift) {
-            const k = 1.0;
-            const compression =
-              this.particleDensity[i * n + j] - this.particleRestDensity;
-            if (compression > 0.0) div = div - k * compression;
-          }
-
-          let p = -div / s;
-          p *= overRelaxation;
-          this.p[center] += cp * p;
-          this.u[center] -= sx0 * p;
-          this.u[right] += sx1 * p;
-          this.v[center] -= sy0 * p;
-          this.v[top] += sy1 * p;
-        }
-      }
-    }
-  }
-
-  setSciColor(
-    cellNr: number,
-    val: number,
-    minVal: number,
-    maxVal: number
-  ): void {
-    val = Math.min(Math.max(val, minVal), maxVal - 0.0001);
-    const d = maxVal - minVal;
-    val = d === 0.0 ? 0.5 : (val - minVal) / d;
-    const m = 0.25;
-    const num = Math.floor(val / m);
-    const s = (val - num * m) / m;
-    let r: number, g: number, b: number;
-
-    switch (num) {
-      case 0:
-        r = s;
-        g = s;
-        b = s;
-        break;
-      case 1:
-        r = 1.0 - s;
-        g = 1.0 - s;
-        b = 1.0 - s;
-        break;
-      case 2:
-        r = s;
-        g = s;
-        b = s;
-        break;
-      case 3:
-        r = 1.0 - s;
-        g = 1.0 - s;
-        b = 1.0 - s;
-        break;
-      default:
-        r = 0;
-        g = 0;
-        b = 0;
-    }
-
-    this.cellColor[3 * cellNr] = r;
-    this.cellColor[3 * cellNr + 1] = g;
-    this.cellColor[3 * cellNr + 2] = b;
-  }
-
-  updateCellColors(): void {
-    this.cellColor.fill(0.0);
-    for (let i = 0; i < this.fNumCells; i++) {
-      if (this.cellType[i] === SOLID_CELL) {
-        this.cellColor[3 * i] = 0.5;
-        this.cellColor[3 * i + 1] = 0.5;
-        this.cellColor[3 * i + 2] = 0.5;
-      } else if (this.cellType[i] === FLUID_CELL) {
-        let d = this.particleDensity[i];
-        if (this.particleRestDensity > 0.0) d /= this.particleRestDensity;
-        this.setSciColor(i, d, 0.0, 2.0);
-      }
-    }
-  }
-
-  simulate(
-    dt: number,
-    gravityX: number,
-    gravityY: number,
-    flipRatio: number,
-    numPressureIters: number,
-    numParticleIters: number,
-    overRelaxation: number,
-    compensateDrift: boolean,
-    separateParticles: boolean,
-    obstacleX: number,
-    obstacleY: number,
-    obstacleRadius: number
-  ): void {
-    this.integrateParticles(dt, gravityX, gravityY);
-    if (separateParticles) this.pushParticlesApart(numParticleIters);
-    this.handleParticleCollisions(obstacleX, obstacleY, obstacleRadius);
-    this.transferVelocities(true);
-    this.updateParticleDensity();
-    this.solveIncompressibility(
-      numPressureIters,
-      dt,
-      overRelaxation,
-      compensateDrift
-    );
-    this.transferVelocities(false, flipRatio);
-    this.updateCellColors();
-  }
-}
-
 interface FooterProps {
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function Footer({ className = "" }: FooterProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const renderRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<{
-    gravity: number;
-    dt: number;
-    flipRatio: number;
-    numPressureIters: number;
-    numParticleIters: number;
-    overRelaxation: number;
-    compensateDrift: boolean;
-    separateParticles: boolean;
-    obstacleX: number;
-    obstacleY: number;
-    obstacleRadius: number;
-    paused: boolean;
-    fluid: FlipFluid | null;
-  } | null>(null);
-  const mouseDownRef = useRef(false);
-  const animationRef = useRef<number | null>(null);
-  const dimensionsRef = useRef({
-    gridSize: MIN_GRID_SIZE,
-    realWidth: 0,
-    realHeight: 0,
-    cScale: 1,
-    simWidth: 1,
-    simHeight: 2,
-  });
-
-  const setupScene = useCallback((width: number, height: number) => {
-    const gridSize = Math.max(
-      Math.round(Math.sqrt((width * height) / TARGET_LONG_SIDE)),
-      MIN_GRID_SIZE
-    );
-    const realWidth = Math.ceil(width / gridSize + CELL_CROP_X * 2) * gridSize;
-    const realHeight =
-      Math.ceil(height / gridSize + CELL_CROP_Y * 2) * gridSize;
-    const yResolution = realHeight / gridSize;
-    const simHeight = 2.0;
-    const cScale = realHeight / simHeight;
-    const simWidth = realWidth / cScale;
-
-    dimensionsRef.current = {
-      gridSize,
-      realWidth,
-      realHeight,
-      cScale,
-      simWidth,
-      simHeight,
-    };
-
-    const res = yResolution;
-    const tankHeight = 1.0 * simHeight;
-    const tankWidth = 1.0 * simWidth;
-    const h = tankHeight / res;
-    const density = 1000.0;
-    const relWaterHeight = 0.618;
-    const relWaterWidth = 1;
-    const r = 0.3 * h;
-    const dx = 2.0 * r;
-    const dy = (Math.sqrt(3.0) / 2.0) * dx;
-    const numX = Math.floor(
-      (relWaterWidth * tankWidth - 2.0 * h - 2.0 * r) / dx
-    );
-    const numY = Math.floor(
-      (relWaterHeight * tankHeight - 2.0 * h - 2.0 * r) / dy
-    );
-    const maxParticles = numX * numY;
-
-    const fluid = new FlipFluid(
-      density,
-      tankWidth,
-      tankHeight,
-      h,
-      r,
-      maxParticles
-    );
-    fluid.numParticles = numX * numY;
-
-    let p = 0;
-    for (let i = 0; i < numX; i++) {
-      for (let j = 0; j < numY; j++) {
-        const xOffset = (tankWidth - numX * dx) / 2;
-        const yOffset = (tankHeight - numY * dy) * -0.5;
-        fluid.particlePos[p++] =
-          h + r + dx * i + (j % 2 === 0 ? 0.0 : r) + xOffset;
-        fluid.particlePos[p++] = h + r + dy * j + yOffset;
-      }
-    }
-
-    const n = fluid.fNumY;
-    for (let i = 0; i < fluid.fNumX; i++) {
-      for (let j = 0; j < fluid.fNumY; j++) {
-        let s = 1.0;
-        if (i === 0 || i === fluid.fNumX - 1 || j === 0) s = 0.0;
-        fluid.s[i * n + j] = s;
-      }
-    }
-
-    sceneRef.current = {
-      gravity: GRAVITY,
-      dt: SPEED_BASE,
-      flipRatio: 0.9,
-      numPressureIters: 30,
-      numParticleIters: 2,
-      overRelaxation: 1.9,
-      compensateDrift: true,
-      separateParticles: true,
-      obstacleX: simWidth / 2,
-      obstacleY: simHeight * 0.5,
-      obstacleRadius: 0.4,
-      paused: false,
-      fluid,
-    };
-
-    return { fluid, gridSize, realWidth, realHeight };
-  }, []);
-
-  const setObstacle = useCallback((x: number, y: number, _reset: boolean) => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    scene.obstacleX = x;
-    scene.obstacleY = y;
-  }, []);
-
-  const startDrag = useCallback(
-    (clientX: number, clientY: number) => {
-      const container = containerRef.current;
-      if (!container) return;
-      const { cScale, realHeight } = dimensionsRef.current;
-      const bounds = container.getBoundingClientRect();
-      const mx = clientX - bounds.left;
-      const my = clientY - bounds.top;
-      mouseDownRef.current = true;
-      const x = mx / cScale;
-      const y = (realHeight - my) / cScale;
-      setObstacle(x, y, true);
-      if (sceneRef.current) sceneRef.current.paused = false;
-    },
-    [setObstacle]
-  );
-
-  const drag = useCallback(
-    (clientX: number, clientY: number) => {
-      if (!mouseDownRef.current) return;
-      const container = containerRef.current;
-      if (!container) return;
-      const { cScale, realHeight } = dimensionsRef.current;
-      const bounds = container.getBoundingClientRect();
-      const mx = clientX - bounds.left;
-      const my = clientY - bounds.top;
-      const x = mx / cScale;
-      const y = (realHeight - my) / cScale;
-      setObstacle(x, y, false);
-    },
-    [setObstacle]
-  );
-
-  const endDrag = useCallback(() => {
-    mouseDownRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || 400;
-
-    const result = setupScene(width, height);
-    if (!result) return;
-
-    const { gridSize, realWidth, realHeight } = result;
-    const renderEl = renderRef.current;
-
-    if (renderEl) {
-      renderEl.style.width = `${realWidth}px`;
-      renderEl.style.height = `${realHeight}px`;
-      renderEl.style.fontSize = `${gridSize}px`;
-      renderEl.style.lineHeight = `${gridSize}px`;
-    }
-
-    const { cScale } = dimensionsRef.current;
-    const startX = width / 2 / cScale;
-    const startY = (realHeight - height * 0.54) / cScale;
-    setObstacle(startX, startY, true);
-    endDrag();
-
-    const update = () => {
-      const scene = sceneRef.current;
-      if (!scene || !scene.fluid) return;
-
-      const maxRadius = width > height ? 0.47 : 0.37;
-      scene.obstacleRadius = (scene.obstacleRadius * 3 + maxRadius) / 4;
-
-      if (!scene.paused) {
-        scene.fluid.simulate(
-          scene.dt,
-          0,
-          scene.gravity,
-          scene.flipRatio,
-          scene.numPressureIters,
-          scene.numParticleIters,
-          scene.overRelaxation,
-          scene.compensateDrift,
-          scene.separateParticles,
-          scene.obstacleX,
-          scene.obstacleY,
-          scene.obstacleRadius
-        );
-      }
-
-      const f = scene.fluid;
-      if (!scene.paused && renderEl) {
-        let toRender = "";
-        for (let i = f.fNumY - CELL_CROP_Y; i > CELL_CROP_Y; i--) {
-          let row = "";
-          for (let j = CELL_CROP_X; j < f.fNumX - CELL_CROP_X; j++) {
-            const currentRenderChar =
-              RENDER_CHARS[Math.floor((i + j + 1) % RENDER_CHARS.length)];
-            const renderCharDictionary = [...currentRenderChar]
-              .sort((a, b) => a[1] - b[1])
-              .map(([char]) => char)
-              .join("");
-            const cellColor = f.cellColor[3 * (j * f.fNumY + i)];
-            row +=
-              renderCharDictionary[
-                Math.floor(cellColor * renderCharDictionary.length)
-              ];
-          }
-          toRender += row + "\n";
-        }
-        renderEl.textContent = toRender;
-      }
-
-      animationRef.current = requestAnimationFrame(update);
-    };
-
-    update();
-
-    const handleMouseDown = (e: MouseEvent) => {
-      if (sceneRef.current) {
-        sceneRef.current.obstacleRadius = 0.0;
-        sceneRef.current.dt = SPEED_1;
-      }
-      startDrag(e.clientX, e.clientY);
-    };
-    const handleMouseUp = () => {
-      if (sceneRef.current) sceneRef.current.dt = SPEED_2;
-      endDrag();
-    };
-    const handleMouseMove = (e: MouseEvent) => drag(e.clientX, e.clientY);
-    const handleTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      if (sceneRef.current) {
-        sceneRef.current.obstacleRadius = 0.0;
-        sceneRef.current.dt = SPEED_1;
-      }
-      startDrag(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const handleTouchEnd = () => {
-      if (sceneRef.current) sceneRef.current.dt = SPEED_2;
-      endDrag();
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      drag(e.touches[0].clientX, e.touches[0].clientY);
-    };
-
-    container.addEventListener("mousedown", handleMouseDown);
-    container.addEventListener("mouseup", handleMouseUp);
-    container.addEventListener("mousemove", handleMouseMove);
-    container.addEventListener("touchstart", handleTouchStart, {
-      passive: false,
-    });
-    container.addEventListener("touchend", handleTouchEnd);
-    container.addEventListener("touchmove", handleTouchMove, {
-      passive: false,
-    });
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      container.removeEventListener("mousedown", handleMouseDown);
-      container.removeEventListener("mouseup", handleMouseUp);
-      container.removeEventListener("mousemove", handleMouseMove);
-      container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("touchend", handleTouchEnd);
-      container.removeEventListener("touchmove", handleTouchMove);
-    };
-  }, [setupScene, setObstacle, startDrag, drag, endDrag]);
-
+export default function Footer({ className = "", style }: FooterProps) {
   return (
     <footer
-      ref={containerRef}
-      className={`relative z-100 w-full h-screen bg-black overflow-hidden ${className}`}
+      className={`relative w-full min-h-[50vh] bg-[#0a0a0a] z-10 flex flex-col items-center justify-between p-8 font-mono text-[11px] text-[rgba(245,245,245,0.9)] uppercase leading-[1.2] ${className}`}
+      style={style}
     >
-      <div
-        ref={renderRef}
-        className="absolute top-0 left-0 whitespace-pre font-mono font-bold text-white"
-        style={{ letterSpacing: "0.4em" }}
-      />
+      <div className="w-full h-full flex flex-col justify-between">
+        {/* Main Content */}
+        <div className="flex justify-between w-full mb-8">
+          {/* Left Column */}
+          <div className="flex flex-col gap-[0.15rem] text-[12px]">
+            <p>THE DARKNESS</p>
+            <p>IS WHERE</p>
+            <p>LIGHT IS BORN</p>
+            <p>EMPTINESS</p>
+            <p>CREATES SPACE</p>
+            <p>FOR HEALING</p>
+          </div>
+
+          {/* Right Column */}
+          <div className="flex flex-col gap-[0.15rem] text-[12px] text-right max-w-[40%]">
+            <p>CREATIVITY FLOWS THROUGH</p>
+            <p>INFINITE PATHWAYS</p>
+            <p>CONSCIOUSNESS EXPANDS</p>
+            <p>INTO BOUNDLESS REALMS</p>
+            <p>OF LIGHT AND POSSIBILITY</p>
+            <p>WHERE HEALING BECOMES ART</p>
+          </div>
+        </div>
+
+        {/* Credits */}
+        <div className="text-[10px] tracking-[0.7em] text-[rgba(245,245,245,0.6)] mb-4">
+          <p>
+            Design & Development by{" "}
+            <a
+              href="https://expontmind.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[rgba(245,245,245,0.9)] no-underline hover:opacity-70 transition-opacity"
+            >
+              EXPONT MIND
+            </a>
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom SVG/Logo Section */}
+      <div className="w-full mt-8">
+        <div className="w-full flex items-center justify-center">
+          <svg
+            viewBox="0 0 800 100"
+            className="w-full max-w-4xl h-auto"
+            fill="rgba(245, 245, 245, 0.9)"
+          >
+            <text
+              x="50%"
+              y="50%"
+              dominantBaseline="middle"
+              textAnchor="middle"
+              className="font-mono text-[72px] uppercase tracking-[0.3em]"
+              style={{ fontSize: "72px" }}
+            >
+              EXPONT MIND
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      {/* Bottom Links */}
+      <div className="w-full flex justify-between items-center mt-8 pt-4 border-t border-white/10">
+        <div className="flex gap-8 text-[10px] tracking-[0.1em]">
+          <a
+            href="#"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            PRIVACY
+          </a>
+          <a
+            href="#"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            TERMS
+          </a>
+          <a
+            href="#"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            COOKIES
+          </a>
+        </div>
+
+        <div className="flex gap-8 text-[10px] tracking-[0.1em]">
+          <a
+            href="https://twitter.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            TWITTER
+          </a>
+          <a
+            href="https://instagram.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            INSTAGRAM
+          </a>
+          <a
+            href="https://linkedin.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[rgba(245,245,245,0.6)] no-underline hover:text-[rgba(245,245,245,0.9)] transition-colors"
+          >
+            LINKEDIN
+          </a>
+        </div>
+
+        <div className="text-[10px] tracking-[0.1em] text-[rgba(245,245,245,0.4)]">
+          © {new Date().getFullYear()} EXPONT MIND
+        </div>
+      </div>
     </footer>
   );
 }
-
-export default Footer;

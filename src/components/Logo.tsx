@@ -14,11 +14,11 @@ type GLTFResult = GLTF & {
 };
 
 const materialProps = {
-  thickness: 0.2,
+  thickness: 1,
   roughness: 0,
   transmission: 1,
   ior: 1.2,
-  chromaticAberration: 0.02,
+  chromaticAberration: 0.08,
   backside: true,
 };
 
@@ -34,8 +34,6 @@ export function Logo(props: JSX.IntrinsicElements["group"]) {
     // Scroll хийх бүрт тасралтгүй rotate хийнэ (хязгааргүй)
     const scrollProgress = window.scrollY / (windowHeight * 3);
 
-    // Анхны rotation (180°) + scroll rotation
-    // Math.PI-аас эхлээд scroll хийхэд нэмэгдэнэ
     targetRotationZ.current = Math.PI + scrollProgress * Math.PI;
 
     // Smooth interpolation
@@ -48,8 +46,8 @@ export function Logo(props: JSX.IntrinsicElements["group"]) {
       ref={groupRef}
       {...props}
       dispose={null}
-      scale={1.5}
-      rotation={[-Math.PI / 2, 0, 0]}
+      scale={props.scale ?? 1.5}
+      rotation={props.rotation ?? [-Math.PI / 2, 0, 0]}
     >
       <mesh {...nodes.path1}>
         <MeshTransmissionMaterial {...materialProps} />

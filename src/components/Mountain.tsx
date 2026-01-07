@@ -18,7 +18,7 @@ type GLTFResult = GLTF & {
 
 export function Mountain(props: ThreeElements["group"]) {
   const { nodes, materials } = useGLTF(
-    "/snowy_mountain_v2_-_terrain (1).glb"
+    "/mountain.glb"
   ) as unknown as GLTFResult;
   return (
     <group
@@ -64,4 +64,4 @@ export function Mountain(props: ThreeElements["group"]) {
   );
 }
 
-useGLTF.preload("/snowy_mountain_v2_-_terrain (1).glb");
+useGLTF.preload("/mountain.glb");
