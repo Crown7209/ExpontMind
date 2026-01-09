@@ -13,7 +13,49 @@ const lerp = (start: number, end: number, factor: number) => {
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
-export default function TestPage() {
+interface CardData {
+  text: string;
+  label: string;
+  descTop: string;
+  descBottom: string;
+}
+
+interface CardStackProps {
+  cards?: CardData[];
+  className?: string;
+}
+
+const defaultCards: CardData[] = [
+  {
+    text: "CODE",
+    label: "EXPERIENCE",
+    descTop: "Precision engineering fused with",
+    descBottom: "creativity for flawless performance",
+  },
+  {
+    text: "3D",
+    label: "INTERACTIVE",
+    descTop: "Immersive visuals and realtime",
+    descBottom: "interaction that truly stand out",
+  },
+  {
+    text: "AI",
+    label: "AUTOMATION",
+    descTop: "Automation and intelligence that",
+    descBottom: "elevate every digital experience",
+  },
+  {
+    text: "UXUI",
+    label: "CREATIVE",
+    descTop: "Premium, intuitive interfaces",
+    descBottom: "crafted for effortless user journeys",
+  },
+];
+
+export function CardStack({
+  cards = defaultCards,
+  className = "",
+}: CardStackProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -24,8 +66,8 @@ export default function TestPage() {
 
   // Store card rotations in refs (no re-render)
   // Start at 180° (showing back of card)
-  const cardRotationsRef = useRef<number[]>([180, 180, 180, 180]);
-  const targetCardRotationsRef = useRef<number[]>([180, 180, 180, 180]);
+  const cardRotationsRef = useRef<number[]>(cards.map(() => 180));
+  const targetCardRotationsRef = useRef<number[]>(cards.map(() => 180));
 
   // Store HolographicCard update functions
   const cardUpdateFnsRef = useRef<((rotation: number) => void)[]>([]);
@@ -34,51 +76,16 @@ export default function TestPage() {
   const isDraggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragCardIndexRef = useRef<number | null>(null);
-  const dragRotationsRef = useRef<number[]>([0, 0, 0, 0]);
-  const targetDragRotationsRef = useRef<number[]>([0, 0, 0, 0]);
+  const dragRotationsRef = useRef<number[]>(cards.map(() => 0));
+  const targetDragRotationsRef = useRef<number[]>(cards.map(() => 0));
 
   // Hover rotation state (X, Y, Z for each card)
-  const hoverRotationsRef = useRef<{ x: number; y: number; z: number }[]>([
-    { x: 0, y: 0, z: 0 },
-    { x: 0, y: 0, z: 0 },
-    { x: 0, y: 0, z: 0 },
-    { x: 0, y: 0, z: 0 },
-  ]);
-  const targetHoverRotationsRef = useRef<{ x: number; y: number; z: number }[]>(
-    [
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 },
-      { x: 0, y: 0, z: 0 },
-    ]
+  const hoverRotationsRef = useRef<{ x: number; y: number; z: number }[]>(
+    cards.map(() => ({ x: 0, y: 0, z: 0 }))
   );
-
-  const cards = [
-    {
-      text: "CODE",
-      label: "EXPERIENCE",
-      descTop: "Precision engineering fused with",
-      descBottom: "creativity for flawless performance",
-    },
-    {
-      text: "3D",
-      label: "INTERACTIVE",
-      descTop: "Immersive visuals and realtime",
-      descBottom: "interaction that truly stand out",
-    },
-    {
-      text: "AI",
-      label: "AUTOMATION",
-      descTop: "Automation and intelligence that",
-      descBottom: "elevate every digital experience",
-    },
-    {
-      text: "UXUI",
-      label: "CREATIVE",
-      descTop: "Premium, intuitive interfaces",
-      descBottom: "crafted for effortless user journeys",
-    },
-  ];
+  const targetHoverRotationsRef = useRef<{ x: number; y: number; z: number }[]>(
+    cards.map(() => ({ x: 0, y: 0, z: 0 }))
+  );
 
   // Calculate card transform based on progress
   const updateCardTransforms = useCallback(
@@ -150,8 +157,8 @@ export default function TestPage() {
         targetCardRotationsRef.current[index] = targetRotation;
 
         // Get hover rotations for this card
-        const hoverX = hoverRotationsRef.current[index].x;
-        const hoverZ = hoverRotationsRef.current[index].z;
+        const hoverX = hoverRotationsRef.current[index]?.x ?? 0;
+        const hoverZ = hoverRotationsRef.current[index]?.z ?? 0;
 
         // Apply transforms directly to DOM (rotateY handled by HolographicCard)
         cardEl.style.transform = `
@@ -190,6 +197,8 @@ export default function TestPage() {
 
     // Smooth lerp for each card's hover rotation (X, Y, Z)
     for (let i = 0; i < hoverRotationsRef.current.length; i++) {
+      if (!hoverRotationsRef.current[i] || !targetHoverRotationsRef.current[i])
+        continue;
       hoverRotationsRef.current[i].x = lerp(
         hoverRotationsRef.current[i].x,
         targetHoverRotationsRef.current[i].x,
@@ -209,11 +218,12 @@ export default function TestPage() {
 
     // Smooth lerp for each card's rotation (Y axis for flip + hover Y)
     for (let i = 0; i < cardRotationsRef.current.length; i++) {
+      const hoverY = hoverRotationsRef.current[i]?.y ?? 0;
       cardRotationsRef.current[i] = lerp(
         cardRotationsRef.current[i],
         targetCardRotationsRef.current[i] +
           dragRotationsRef.current[i] +
-          hoverRotationsRef.current[i].y,
+          hoverY,
         0.08
       );
 
@@ -379,50 +389,46 @@ export default function TestPage() {
   }, [animate]);
 
   return (
-    <div className="bg-black">
-      <div className="h-[50vh]" />
-
-      <div ref={containerRef} className="h-[500vh] relative">
-        <div className="h-screen flex items-center justify-center sticky top-0">
-          <div
-            className="relative flex items-center justify-center"
-            style={{
-              perspective: "1200px",
-              perspectiveOrigin: "50% 50%",
-            }}
-          >
-            {cards.map((card, index) => (
-              <div
-                key={index}
-                ref={(el) => {
-                  cardRefs.current[index] = el;
+    <div ref={containerRef} className={`h-[500vh] relative ${className} z-10 `}>
+      <div className="h-screen flex items-center justify-center sticky top-0">
+        <div
+          className="relative flex items-center justify-center"
+          style={{
+            perspective: "1200px",
+            perspectiveOrigin: "50% 50%",
+          }}
+        >
+          {cards.map((card, index) => (
+            <div
+              key={index}
+              ref={(el) => {
+                cardRefs.current[index] = el;
+              }}
+              className="absolute w-[320px] h-[480px]"
+              style={{
+                transformStyle: "preserve-3d",
+                willChange: "transform, opacity",
+              }}
+            >
+              <HolographicCard
+                text={card.text}
+                label={card.label}
+                descTop={card.descTop}
+                descBottom={card.descBottom}
+                autoRotate={false}
+                externalRotationY={0}
+                color0={[180, 200, 210]}
+                color1={[220, 240, 255]}
+                onRotationUpdate={(fn: (rotation: number) => void) => {
+                  cardUpdateFnsRef.current[index] = fn;
                 }}
-                className="absolute w-[320px] h-[480px]"
-                style={{
-                  transformStyle: "preserve-3d",
-                  willChange: "transform, opacity",
-                }}
-              >
-                <HolographicCard
-                  text={card.text}
-                  label={card.label}
-                  descTop={card.descTop}
-                  descBottom={card.descBottom}
-                  autoRotate={false}
-                  externalRotationY={0}
-                  color0={[180, 200, 210]}
-                  color1={[220, 240, 255]}
-                  onRotationUpdate={(fn: (rotation: number) => void) => {
-                    cardUpdateFnsRef.current[index] = fn;
-                  }}
-                />
-              </div>
-            ))}
-          </div>
+              />
+            </div>
+          ))}
         </div>
       </div>
-
-      <div className="h-[50vh]" />
     </div>
   );
 }
+
+export default CardStack;

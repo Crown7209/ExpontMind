@@ -17,6 +17,7 @@ import TrainScene from "@/components/TrainScene";
 import { Partners } from "@/components/Partners";
 import ScrollTrailText from "@/components/ScrollTrailText";
 import { About } from "@/components/About";
+import { CardStack } from "@/components/CardStack";
 
 function useTextVisibility() {
   const [opacity, setOpacity] = useState(1);
@@ -273,6 +274,8 @@ export default function Home() {
           <div className="ghost_work-item w-full" style={{ height: "400vh" }} />
         </div>
       </section>
+
+      <CardStack />
 
       <Partners />
 
