@@ -68,7 +68,7 @@ export const Partners = () => {
 
       <div
         ref={containerRef}
-        className="relative z-10 min-h-screen w-full bg-black py-32"
+        className="relative z-10 h-screen w-full bg-black py-32"
       >
         <motion.div
           style={{ opacity, y }}

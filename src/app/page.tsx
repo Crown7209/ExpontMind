@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import gsap from "gsap";
-import ScrollTrigger from "gsap/ScrollTrigger";
+import { useRef } from "react";
 import IceTrails from "@/components/IceTrails";
 import { Canvas } from "@react-three/fiber";
 import { Scene } from "@/components/Scene";
@@ -16,165 +14,21 @@ import Footer from "@/components/navigation/Footer";
 import TrainScene from "@/components/TrainScene";
 import { Partners } from "@/components/Partners";
 import ScrollTrailText from "@/components/ScrollTrailText";
-import { About } from "@/components/About";
-import { CardStack } from "@/components/CardStack";
-
-function useTextVisibility(
-  textItemRef: React.RefObject<HTMLDivElement | null>
-) {
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollY = window.scrollY;
-      const windowHeight = window.innerHeight;
-
-      // Text section fades out as Work section enters
-      const fadeStart = windowHeight * 4.0;
-      const fadeEnd = windowHeight * 4.5;
-
-      let opacity = 1;
-      if (scrollY < fadeStart) {
-        opacity = 1;
-      } else if (scrollY >= fadeEnd) {
-        opacity = 0;
-      } else {
-        const progress = (scrollY - fadeStart) / (fadeEnd - fadeStart);
-        opacity = 1 - progress;
-      }
-
-      // Direct DOM manipulation - no re-render
-      if (textItemRef.current) {
-        textItemRef.current.style.opacity = String(opacity);
-      }
-    };
-
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [textItemRef]);
-}
-
-function useTrainSceneScroll() {
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!containerRef.current) return;
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
-      const containerHeight = containerRef.current.offsetHeight - windowHeight;
-
-      // Container дээд хэсэг viewport-н дээд хэсэгт хүрэхэд scroll эхэлнэ
-      if (rect.top >= 0) {
-        setScrollProgress(0);
-      } else if (rect.top <= -containerHeight) {
-        setScrollProgress(1);
-      } else {
-        const progress = -rect.top / containerHeight;
-        setScrollProgress(Math.max(0, Math.min(1, progress)));
-      }
-    };
-
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, []);
-
-  return { scrollProgress, containerRef };
-}
+import { useLoading } from "@/context/LoadingContext";
+import { useTextVisibility } from "@/hooks/useTextVisibility";
+import { useTrainSceneScroll } from "@/hooks/useTrainSceneScroll";
+import { useDisableScrollOnLoading } from "@/hooks/useDisableScrollOnLoading";
+import { useGsapScrollAnimations } from "@/hooks/useGsapScrollAnimations";
+import { TextHoverEffect } from "@/components/ui/text-hover-effect";
 
 export default function Home() {
   const textItemRef = useRef<HTMLDivElement>(null);
-  useTextVisibility(textItemRef);
+  const { isLoading } = useLoading();
   const { scrollProgress, containerRef } = useTrainSceneScroll();
 
-  useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
-
-    // Select single elements - use querySelector instead of querySelectorAll
-    const workItem = document.querySelector('[data-work="item"]');
-    const ghostItem = document.querySelector(".ghost_work-item");
-    const workImage = document.querySelector('[data-work="image"]');
-
-    const textItem = document.querySelector(".text_item");
-    const ghostTextItem = document.querySelector(".ghost_text-item");
-
-    if (!workItem || !ghostItem || !workImage || !textItem || !ghostTextItem)
-      return;
-
-    // Initial setup
-    gsap.set(workItem, {
-      position: "fixed",
-      top: "0",
-      clipPath: "inset(100% 0 0% 0)",
-      zIndex: 10,
-    });
-
-    // Set initial image scale
-    gsap.set(workImage, {
-      scale: 1.4,
-      yPercent: 0,
-    });
-
-    // Text Section Setup
-    gsap.set(textItem, {
-      position: "fixed",
-      top: "0",
-      clipPath: "inset(100% 0 0% 0)",
-      zIndex: 5, // Between hero and work
-    });
-
-    // Text Section Animation
-    const stText = {
-      trigger: ghostTextItem,
-      scrub: true,
-      start: "top bottom",
-      end: "+75vh top",
-    };
-
-    gsap.to(textItem, {
-      clipPath: "inset(0% 0 0 0)",
-      scrollTrigger: stText,
-    });
-
-    // Main reveal animations
-    const stStarting = {
-      trigger: ghostItem,
-      scrub: true,
-      start: "top bottom",
-      end: "+75vh top",
-    };
-
-    gsap.to(workItem, {
-      clipPath: "inset(0% 0 0 0)",
-      scrollTrigger: stStarting,
-    });
-
-    gsap.to(workImage, {
-      yPercent: 0,
-      scale: 1.2,
-      scrollTrigger: stStarting,
-    });
-
-    // Final animations
-    const stFinal = {
-      trigger: ghostItem,
-      scrub: true,
-      start: "105% bottom",
-      toggleActions: "play reverse play reverse" as const,
-    };
-
-    gsap.to(workItem, {
-      scrollTrigger: stFinal,
-    });
-
-    return () => {
-      ScrollTrigger.getAll().forEach((t) => t.kill());
-    };
-  }, []);
+  useTextVisibility(textItemRef);
+  useDisableScrollOnLoading(isLoading);
+  useGsapScrollAnimations();
 
   return (
     <div className="min-h-screen font-sans bg-[#0f0a0a]">
@@ -289,9 +143,9 @@ export default function Home() {
         ref={containerRef}
         className="relative w-full h-[400vh] z-10 bg-black"
       >
-        <p className="text-4xl md:text-6xl lg:text-7xl font-normal text-white tracking-wide uppercase px-24">
-          Featured projects
-        </p>
+        <div className="h-[32vh] flex items-center justify-center">
+          <TextHoverEffect text="PROJECTS" />
+        </div>
         <TrainScene usePageScroll scrollProgress={scrollProgress} />
       </div>
 
