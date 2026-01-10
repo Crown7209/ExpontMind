@@ -1,7 +1,14 @@
 "use client";
 
 import * as THREE from "three";
-import { Suspense, useRef, useState, createContext, useContext } from "react";
+import {
+  Suspense,
+  useRef,
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+} from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   useCursor,
@@ -12,6 +19,11 @@ import {
   useScroll,
 } from "@react-three/drei";
 import { easing } from "maath";
+
+// Check if mobile for performance optimizations
+const isMobile =
+  typeof navigator !== "undefined" &&
+  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 const PageScrollContext = createContext<{ scrollProgress: number }>({
   scrollProgress: 0,
@@ -228,10 +240,10 @@ function Scene({ usePageScroll = false }: SceneProps) {
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[50, 50]} />
         <MeshReflectorMaterial
-          blur={[300, 100]}
-          resolution={2048}
+          blur={isMobile ? [100, 50] : [200, 80]}
+          resolution={isMobile ? 512 : 1024}
           mixBlur={1}
-          mixStrength={80}
+          mixStrength={isMobile ? 40 : 60}
           roughness={1}
           depthScale={1.2}
           minDepthThreshold={0.4}
@@ -266,34 +278,74 @@ export default function TrainScene({
   usePageScroll = false,
   scrollProgress = 0,
 }: TrainSceneProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const observerRef = useRef<HTMLDivElement>(null);
+
+  // Lazy load with IntersectionObserver - load when near viewport
+  useEffect(() => {
+    const element = observerRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          setHasLoaded(true);
+        } else if (hasLoaded) {
+          // Keep mounted but pause rendering when out of view
+          setIsVisible(false);
+        }
+      },
+      {
+        rootMargin: "300px", // Start loading 300px before visible
+        threshold: 0,
+      }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasLoaded]);
+
   return (
-    <div className="sticky top-0 h-screen w-full">
-      <PageScrollContext.Provider value={{ scrollProgress }}>
-        <Canvas
-          dpr={[1, 1.5]}
-          shadows
-          camera={{ position: [-20, 5, 20], fov: 35 }}
-          gl={{ alpha: false }}
-        >
-          <fog attach="fog" args={["#000000", 30, 45]} />
-          <color attach="background" args={["#000000"]} />
-          <ambientLight intensity={0.25} />
-          <directionalLight
-            castShadow
-            intensity={2}
-            position={[10, 6, 6]}
-            shadow-mapSize={[1024, 1024]}
+    <div ref={observerRef} className="sticky top-0 h-screen w-full">
+      {hasLoaded ? (
+        <PageScrollContext.Provider value={{ scrollProgress }}>
+          <Canvas
+            dpr={isMobile ? 1 : [1, 1.5]}
+            shadows={!isMobile}
+            camera={{ position: [-20, 5, 20], fov: 35 }}
+            gl={{
+              alpha: false,
+              antialias: !isMobile,
+              powerPreference: "high-performance",
+            }}
+            performance={{ min: 0.5 }}
+            frameloop={isVisible ? "always" : "demand"}
           >
-            <orthographicCamera
-              attach="shadow-camera"
-              args={[-20, 20, 20, -20]}
-            />
-          </directionalLight>
-          <Suspense fallback={null}>
-            <Scene usePageScroll={usePageScroll} />
-          </Suspense>
-        </Canvas>
-      </PageScrollContext.Provider>
+            <fog attach="fog" args={["#000000", 30, 45]} />
+            <color attach="background" args={["#000000"]} />
+            <ambientLight intensity={0.25} />
+            <directionalLight
+              castShadow={!isMobile}
+              intensity={2}
+              position={[10, 6, 6]}
+              shadow-mapSize={isMobile ? [256, 256] : [512, 512]}
+            >
+              <orthographicCamera
+                attach="shadow-camera"
+                args={[-20, 20, 20, -20]}
+              />
+            </directionalLight>
+            <Suspense fallback={null}>
+              <Scene usePageScroll={usePageScroll} />
+            </Suspense>
+          </Canvas>
+        </PageScrollContext.Provider>
+      ) : (
+        // Placeholder while loading
+        <div className="w-full h-full bg-black" />
+      )}
     </div>
   );
 }

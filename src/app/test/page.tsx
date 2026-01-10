@@ -1,5 +1,6 @@
 "use client";
 
+import CardStack from "@/components/CardStack";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useCallback } from "react";
 
@@ -378,51 +379,5 @@ export default function TestPage() {
     };
   }, [animate]);
 
-  return (
-    <div className="bg-black">
-      <div className="h-[50vh]" />
-
-      <div ref={containerRef} className="h-[500vh] relative">
-        <div className="h-screen flex items-center justify-center sticky top-0">
-          <div
-            className="relative flex items-center justify-center"
-            style={{
-              perspective: "1200px",
-              perspectiveOrigin: "50% 50%",
-            }}
-          >
-            {cards.map((card, index) => (
-              <div
-                key={index}
-                ref={(el) => {
-                  cardRefs.current[index] = el;
-                }}
-                className="absolute w-[320px] h-[480px]"
-                style={{
-                  transformStyle: "preserve-3d",
-                  willChange: "transform, opacity",
-                }}
-              >
-                <HolographicCard
-                  text={card.text}
-                  label={card.label}
-                  descTop={card.descTop}
-                  descBottom={card.descBottom}
-                  autoRotate={false}
-                  externalRotationY={0}
-                  color0={[180, 200, 210]}
-                  color1={[220, 240, 255]}
-                  onRotationUpdate={(fn: (rotation: number) => void) => {
-                    cardUpdateFnsRef.current[index] = fn;
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="h-[50vh]" />
-    </div>
-  );
+  return <CardStack />;
 }

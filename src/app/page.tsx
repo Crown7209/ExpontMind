@@ -281,9 +281,9 @@ export default function Home() {
         </div>
       </section>
 
-      <CardStack />
-
       <Partners />
+
+      {/* <CardStack /> */}
 
       <div
         ref={containerRef}

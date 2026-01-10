@@ -63,7 +63,7 @@ const fragPlane = `
   void main() {
     vec2 uv = gl_FragCoord.xy/resolution.xy ;
     vec4 temptex = texture2D( cardtemplate, vUv);
-    vec4 skulltex = texture2D( skullrender, uv - 0.5 );
+    vec4 skulltex = texture2D( skullrender, uv - 0.25 );
     gl_FragColor = temptex;
     float f = Fresnel(eyeVector, vNormal);
     vec4 noisetex = texture2D( noise, mod(vUv*2.,1.));
@@ -382,12 +382,14 @@ export default function HolographicCard({
 
     s.cameraRTT = new THREE.PerspectiveCamera(30, width / height, 1, 10000);
     s.cameraRTT.position.z = 45;
-    s.cameraRTT.position.y = -2;
+    s.cameraRTT.position.y = 0;
 
     // Renderer
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     s.renderer = new THREE.WebGLRenderer({ antialias: !isMobile, alpha: true });
-    s.renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
+    s.renderer.setPixelRatio(
+      isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5)
+    );
     s.renderer.setSize(width, height);
     s.renderer.autoClear = false;
     s.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -402,7 +404,9 @@ export default function HolographicCard({
 
     // Bloom pass - downsample for performance
     const bloomWidth = isMobile ? Math.floor(width / 3) : Math.floor(width / 2);
-    const bloomHeight = isMobile ? Math.floor(height / 3) : Math.floor(height / 2);
+    const bloomHeight = isMobile
+      ? Math.floor(height / 3)
+      : Math.floor(height / 2);
     const renderScene = new RenderPass(s.sceneRTT, s.cameraRTT);
     s.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(bloomWidth, bloomHeight),
@@ -665,7 +669,7 @@ export default function HolographicCard({
       textGeometry.center();
 
       const textMesh = new THREE.Mesh(textGeometry, s.skullmaterial!);
-      textMesh.position.set(0, -3.5, -10);
+      textMesh.position.set(0, 0, -10);
       textMesh.rotation.set(Math.PI, 0, Math.PI);
       textMesh.scale.set(-1, 1, 1);
 
@@ -722,8 +726,12 @@ export default function HolographicCard({
       // Update skull material (3D text colors)
       if (s.skullmaterial) {
         s.skullmaterial.uniforms.time.value = deltaTime / 4000;
-        s.skullmaterial.uniforms.color1.value = new THREE.Vector3(...actualTextColor1);
-        s.skullmaterial.uniforms.color0.value = new THREE.Vector3(...actualTextColor0);
+        s.skullmaterial.uniforms.color1.value = new THREE.Vector3(
+          ...actualTextColor1
+        );
+        s.skullmaterial.uniforms.color0.value = new THREE.Vector3(
+          ...actualTextColor0
+        );
       }
 
       s.composer.render();
